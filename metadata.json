@@ -1,0 +1,6 @@
+{
+  "name": "Meesho Profit & Loss Calculator",
+  "description": "A free analytics dashboard for Meesho sellers to instantly calculate their profit and loss. This tool helps you understand your earnings, costs, return reasons, and top-performing products by analyzing your sales, payment, and return files. It features secure data processing, handling large files via the Gemini API, and provides a comprehensive dashboard to help you make data-driven decisions to grow your business.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
