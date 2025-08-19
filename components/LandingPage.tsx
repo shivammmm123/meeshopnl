@@ -23,7 +23,7 @@ interface AccordionItemProps {
   q: string;
   a: string;
 }
-const AccordionItem = ({ q, a }: AccordionItemProps) => {
+const AccordionItem: React.FC<AccordionItemProps> = ({ q, a }) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 transition-all duration-300 hover:shadow-xl hover:border-green-300 hover:scale-[1.02]">
@@ -225,8 +225,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart, onShowRedesigned }) 
                    <h2 className="text-4xl font-bold text-center">Frequently Asked Questions</h2>
                 </div>
                 <div className="space-y-4">
-                  {faqs.map((faq, index) => (
-                      <AccordionItem key={index} q={faq.q} a={faq.a} />
+                  {faqs.map((faq) => (
+                      <AccordionItem key={faq.q} q={faq.q} a={faq.a} />
                   ))}
                 </div>
             </div>

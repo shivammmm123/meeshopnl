@@ -38,7 +38,7 @@ interface RawReturnEntry {
 // --- Inlined dataProcessor.ts content starts here ---
 // All functions from dataProcessor.ts are included directly in this worker
 // to make it self-contained and avoid module resolution issues in the worker environment.
-const dataProcessor = (() => {
+const dashboardProcessor = (() => {
 
     const parseNumber = (value: any): number => {
       if (value === null || value === undefined || value === '') {
@@ -479,19 +479,19 @@ self.onmessage = (event) => {
         const { filesData, filterContext: existingFilterContext, filters, skuPrices, recalculateContext } = event.data;
 
         // If recalculateContext is true, we must build it. Otherwise, we use the one passed in.
-        const context = recalculateContext ? dataProcessor.calculateFilterContext(filesData) : existingFilterContext;
+        const context = recalculateContext ? dashboardProcessor.calculateFilterContext(filesData) : existingFilterContext;
 
         if (!context) {
             throw new Error("Filter context is missing and was not recalculated.");
         }
 
         // Run the filtering and recalculation logic
-        const { filteredPayments, filteredOrders, filteredReturns } = dataProcessor.getFilteredRawData(filesData, context, filters);
+        const { filteredPayments, filteredOrders, filteredReturns } = dashboardProcessor.getFilteredRawData(filesData, context, filters);
         
         const allDashboardData = {
-            payments: dataProcessor.calculatePaymentsDashboard(filteredPayments, skuPrices, filesData.adsCost || 0, filesData),
-            orders: dataProcessor.calculateOrdersDashboard(filteredOrders),
-            returns: dataProcessor.calculateReturnsDashboard(filteredReturns)
+            payments: dashboardProcessor.calculatePaymentsDashboard(filteredPayments, skuPrices, filesData.adsCost || 0, filesData),
+            orders: dashboardProcessor.calculateOrdersDashboard(filteredOrders),
+            returns: dashboardProcessor.calculateReturnsDashboard(filteredReturns)
         };
       
         // The payload that will be sent back

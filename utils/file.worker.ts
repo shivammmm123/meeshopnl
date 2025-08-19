@@ -483,7 +483,7 @@ const dataProcessor = (() => {
             }));
     }
 
-    return { runFullAnalysis };
+    return { runFullAnalysis, parseNumber, parseString, parseDate };
 })();
 
 
@@ -494,42 +494,42 @@ const fileConfigs = {
     sheetName: "Order Payments", 
     range: 2,
     parser: (row: any[]): RawPaymentEntry => ({ 
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[0]),       // Col A
-        orderDate: dataProcessor.runFullAnalysis.prototype.parseDate(row[1]),       // Col B
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[4]),           // Col E
-        status: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),        // Col F
-        gstRate: dataProcessor.runFullAnalysis.prototype.parseNumber(row[6]),       // Col G
-        finalPayment: dataProcessor.runFullAnalysis.prototype.parseNumber(row[11]), // Col L
-        invoicePrice: dataProcessor.runFullAnalysis.prototype.parseNumber(row[14]), // Col O
-        returnCost: dataProcessor.runFullAnalysis.prototype.parseNumber(row[25]),   // Col Z
-        tcs: dataProcessor.runFullAnalysis.prototype.parseNumber(row[32]),          // Col AG
-        tds: dataProcessor.runFullAnalysis.prototype.parseNumber(row[34]),          // Col AI
-        claimAmount: dataProcessor.runFullAnalysis.prototype.parseNumber(row[36]),  // Col AK
-        recovery: dataProcessor.runFullAnalysis.prototype.parseNumber(row[37]),     // Col AL
+        orderId: dataProcessor.parseString(row[0]),       // Col A
+        orderDate: dataProcessor.parseDate(row[1]),       // Col B
+        sku: dataProcessor.parseString(row[4]),           // Col E
+        status: dataProcessor.parseString(row[5]),        // Col F
+        gstRate: dataProcessor.parseNumber(row[6]),       // Col G
+        finalPayment: dataProcessor.parseNumber(row[11]), // Col L
+        invoicePrice: dataProcessor.parseNumber(row[14]), // Col O
+        returnCost: dataProcessor.parseNumber(row[25]),   // Col Z
+        tcs: dataProcessor.parseNumber(row[32]),          // Col AG
+        tds: dataProcessor.parseNumber(row[34]),          // Col AI
+        claimAmount: dataProcessor.parseNumber(row[36]),  // Col AK
+        recovery: dataProcessor.parseNumber(row[37]),     // Col AL
     }) 
   },
   orders: { 
     sheetName: null, 
     range: 1,
     parser: (row: any[]): RawOrderEntry => ({ 
-        status: dataProcessor.runFullAnalysis.prototype.parseString(row[0]),
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[1]),
-        state: dataProcessor.runFullAnalysis.prototype.parseString(row[3]),
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),
-        size: dataProcessor.runFullAnalysis.prototype.parseString(row[6]),
+        status: dataProcessor.parseString(row[0]),
+        orderId: dataProcessor.parseString(row[1]),
+        state: dataProcessor.parseString(row[3]),
+        sku: dataProcessor.parseString(row[5]),
+        size: dataProcessor.parseString(row[6]),
     }) 
   },
   returns: { 
     sheetName: null, 
     range: 8,
     parser: (row: any[]): RawReturnEntry => ({ 
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[2]),
-        size: dataProcessor.runFullAnalysis.prototype.parseString(row[3]),
-        category: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[8]),
-        returnType: dataProcessor.runFullAnalysis.prototype.parseString(row[11]),
-        returnReason: dataProcessor.runFullAnalysis.prototype.parseString(row[19]),
-        subReason: dataProcessor.runFullAnalysis.prototype.parseString(row[20]),
+        sku: dataProcessor.parseString(row[2]),
+        size: dataProcessor.parseString(row[3]),
+        category: dataProcessor.parseString(row[5]),
+        orderId: dataProcessor.parseString(row[8]),
+        returnType: dataProcessor.parseString(row[11]),
+        returnReason: dataProcessor.parseString(row[19]),
+        subReason: dataProcessor.parseString(row[20]),
     }) 
   }
 };
@@ -616,7 +616,7 @@ self.onmessage = (event) => {
                     const adsSheetName = workbook.SheetNames.find((name: string) => name.trim().toLowerCase() === "ads cost");
                     if (adsSheetName) {
                         const adsSheet = workbook.Sheets[adsSheetName];
-                        adsCost = self.XLSX.utils.sheet_to_json(adsSheet, { header: 1, range: 3, defval: "" }).reduce((acc: number, row: any[]) => acc + (dataProcessor.runFullAnalysis.prototype.parseNumber(row[7]) || 0), 0);
+                        adsCost = self.XLSX.utils.sheet_to_json(adsSheet, { header: 1, range: 3, defval: "" }).reduce((acc: number, row: any[]) => acc + (dataProcessor.parseNumber(row[7]) || 0), 0);
                     }
                 }
                 

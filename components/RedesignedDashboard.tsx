@@ -1,6 +1,11 @@
 
 
 
+
+
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Package, RotateCcw, TrendingUp, TrendingDown, DollarSign, Box, XCircle, Truck, Repeat, Loader2, Info, AlertTriangle, Target, LayoutDashboard, Menu } from 'lucide-react';
 import { AllDashboardsData, FilterContextData, FilterState, KpiData, RawOrderEntry, FilesData, SkuPrices, SkuDrilldownData, NameValueData, StateDistributionData, ReturnsDashboardData, OrdersDashboardData, RawReturnEntry } from '../types';
@@ -87,16 +92,17 @@ const CombinedKpiItem: React.FC<{ items: KpiData[] }> = ({ items }) => (
 );
 
 const ModernOverviewCard: React.FC<{ title: string; kpis: KpiData[]; totalValue?: string | number; children?: React.ReactNode }> = ({ title, kpis, totalValue, children }) => {
-    const combinedKpis: KpiData[][] = [];
-    const singleKpis: KpiData[] = [];
-    
+    // Filter out any invalid KPI objects to prevent runtime errors
+    const validKpis = kpis.filter((kpi): kpi is KpiData => !!(kpi && kpi.title));
+
     const combinedPairs = [
         ['Delivered', 'Delivered %'], ['RTO', 'RTO %'], ['Returns', 'Return %'], ['Cancelled', 'Cancelled %'],
     ];
 
-    const kpiMap = new Map(kpis.map(k => [k.title, k]));
-    const processedTitles = new Set();
+    const kpiMap = new Map(validKpis.map(k => [k.title, k]));
+    const processedTitles = new Set<string>();
 
+    const combinedKpis: KpiData[][] = [];
     combinedPairs.forEach(pair => {
         const kpi1 = kpiMap.get(pair[0]);
         const kpi2 = kpiMap.get(pair[1]);
@@ -107,11 +113,7 @@ const ModernOverviewCard: React.FC<{ title: string; kpis: KpiData[]; totalValue?
         }
     });
 
-    kpis.forEach(kpi => {
-        if(!processedTitles.has(kpi.title)){
-            singleKpis.push(kpi);
-        }
-    });
+    const singleKpis = validKpis.filter(kpi => !processedTitles.has(kpi.title));
 
     return (
         <div className="bg-white/60 p-6 rounded-2xl shadow-lg border border-gray-200 backdrop-blur-md">

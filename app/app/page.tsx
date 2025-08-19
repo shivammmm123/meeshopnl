@@ -173,7 +173,7 @@ export default function AnalyticsPage() {
         skuPrices,
         recalculateContext: false,
     });
-  }, [filters, skuPrices]);
+  }, [filesData, filterContext, filters, skuPrices]);
 
   const handleResetData = async () => {
     if (window.confirm("Are you sure? This will permanently delete all data from this browser.")) {
