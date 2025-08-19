@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { XCircle, X } from 'lucide-react';
+import { logError } from '@/utils/supabase';
 
 interface ErrorDisplayProps {
   message: string;
@@ -7,6 +8,10 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ message, onClose }) => {
+  useEffect(() => {
+    logError(new Error(message), { context: 'ErrorDisplayComponent' });
+  }, [message]);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 backdrop-blur-sm p-4" role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform transition-all animate-fade-in-down">
@@ -26,7 +31,7 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ message, onClose }) => {
             {message}
           </pre>
           <p className="mt-4 text-xs text-gray-500">
-            For more technical details, please open your browser's developer console (press F12 or Ctrl+Shift+I) and check for any logged errors. If the problem persists, please check your file format or try again.
+            This error has been logged automatically. For more technical details, please open your browser's developer console (press F12 or Ctrl+Shift+I).
           </p>
         </main>
       </div>

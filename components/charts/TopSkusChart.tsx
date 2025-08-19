@@ -1,12 +1,13 @@
 
 
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { NameValueData } from '../../types';
 
 interface ChartProps {
   data: NameValueData[];
   onBarClick?: (sku: string) => void;
+  showLabelInside?: boolean;
 }
 
 // Custom shape for horizontal bar chart with rounded corners on one side
@@ -20,7 +21,7 @@ const RoundedBar = (props: any) => {
   );
 };
 
-const TopSkusChart: React.FC<ChartProps> = ({ data, onBarClick }) => {
+const TopSkusChart: React.FC<ChartProps> = ({ data, onBarClick, showLabelInside = false }) => {
   const tickColor = '#475569';
   
   return (
@@ -61,7 +62,9 @@ const TopSkusChart: React.FC<ChartProps> = ({ data, onBarClick }) => {
             shape={<RoundedBar />} 
             onClick={(data) => onBarClick && data && onBarClick(data.name)}
             style={{ cursor: onBarClick ? 'pointer' : 'default' }}
-            />
+            >
+            {showLabelInside && <LabelList dataKey="value" position="insideRight" fill="#fff" fontSize={10} fontWeight="bold" />}
+          </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

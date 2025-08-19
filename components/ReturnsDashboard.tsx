@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { ReturnsDashboardData } from '../types';
 import ReturnReasonsChart from './charts/ReturnReasonsChart';
@@ -70,4 +71,4 @@ const ReturnsDashboard: React.FC<ReturnsDashboardProps> = ({ data }) => {
   );
 };
 
-export default ReturnsDashboard;
+export default React.memo(ReturnsDashboard);

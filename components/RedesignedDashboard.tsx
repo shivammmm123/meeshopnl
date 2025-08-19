@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Package, RotateCcw, TrendingUp, TrendingDown, DollarSign, Box, XCircle, Truck, Repeat, Loader2, Info, AlertTriangle, Target, LayoutDashboard, Menu } from 'lucide-react';
 import { AllDashboardsData, FilterContextData, FilterState, KpiData, RawOrderEntry, FilesData, SkuPrices, SkuDrilldownData, NameValueData, StateDistributionData, ReturnsDashboardData, OrdersDashboardData, RawReturnEntry } from '../types';
@@ -97,8 +98,10 @@ const ModernOverviewCard: React.FC<{ title: string; kpis: KpiData[]; totalValue?
     const processedTitles = new Set();
 
     combinedPairs.forEach(pair => {
-        if(kpiMap.has(pair[0]) && kpiMap.has(pair[1])){
-            combinedKpis.push([kpiMap.get(pair[0])!, kpiMap.get(pair[1])!]);
+        const kpi1 = kpiMap.get(pair[0]);
+        const kpi2 = kpiMap.get(pair[1]);
+        if (kpi1 && kpi2) {
+            combinedKpis.push([kpi1, kpi2]);
             processedTitles.add(pair[0]);
             processedTitles.add(pair[1]);
         }
@@ -506,4 +509,4 @@ const RedesignedDashboard: React.FC<RedesignedDashboardProps> = (props) => {
     );
 };
 
-export default RedesignedDashboard;
+export default React.memo(RedesignedDashboard);

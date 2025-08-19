@@ -1,7 +1,5 @@
-
 import { parseNumber, parseString, parseDate, runFullAnalysis } from './dataProcessor';
-import { FilesData, SkuPrices, AllDashboardsData, FilterContextData } from '../types';
-import { UploadableFile } from '../App';
+import { FilesData, SkuPrices, AllDashboardsData, FilterContextData, UploadableFile } from '../types';
 
 // Since XLSX is loaded from a script tag in index.html, we declare it here to satisfy TypeScript.
 declare var XLSX: any;
@@ -13,7 +11,24 @@ export interface LocalProcessorPayload {
 }
 
 const fileConfigs = {
-  payments: { sheetName: "Order Payments", range: 3, parser: (row: any[]) => ({ orderId: parseString(row[0]), orderDate: parseDate(row[1]), sku: parseString(row[4]), status: parseString(row[5]), finalPayment: parseNumber(row[11]), claimAmount: parseNumber(row[36]), returnCost: parseNumber(row[25]), }) },
+  payments: { 
+    sheetName: "Order Payments", 
+    range: 2, // Header on row 2, data starts on row 3
+    parser: (row: any[]) => ({ 
+        orderId: parseString(row[0]),       // Col A
+        orderDate: parseDate(row[1]),       // Col B
+        sku: parseString(row[4]),           // Col E
+        status: parseString(row[5]),        // Col F
+        gstRate: parseNumber(row[6]),       // Col G
+        finalPayment: parseNumber(row[11]), // Col L
+        invoicePrice: parseNumber(row[14]), // Col O
+        returnCost: parseNumber(row[25]),   // Col Z
+        tcs: parseNumber(row[32]),          // Col AG
+        tds: parseNumber(row[34]),          // Col AI
+        claimAmount: parseNumber(row[36]),  // Col AK
+        recovery: parseNumber(row[37]),     // Col AL
+    }) 
+  },
   orders: { 
     sheetName: null, 
     range: 1, // Header is on row 1, data starts on row 2
@@ -136,6 +151,7 @@ export const processFileLocally = async (
         const adsSheetName = workbook.SheetNames.find((name: string) => name.trim().toLowerCase() === "ads cost");
         if (adsSheetName) {
             const adsSheet = workbook.Sheets[adsSheetName];
+            // Header on row 3, data on row 4, so range is 3
             adsCost = XLSX.utils.sheet_to_json(adsSheet, { header: 1, range: 3, defval: "" }).reduce((acc: number, row: any[]) => acc + (parseNumber(row[7]) || 0), 0);
         }
     }

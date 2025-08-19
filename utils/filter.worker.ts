@@ -1,10 +1,5 @@
-// This is a standalone web worker file. It's referenced by `components/UploadPage.tsx`.
-// It runs in a separate thread and handles heavy file processing.
-
-// Since we are in a worker, we must manually import scripts.
-// The `self` keyword refers to the worker's global scope.
-importScripts('https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js');
-declare var XLSX: any; // Declaring XLSX for TypeScript since it's loaded via importScripts
+// This is a standalone web worker file. It's referenced by `app/app/page.tsx`.
+// It runs in a separate thread and handles heavy data filtering and dashboard recalculations.
 
 // --- Types needed for data processing ---
 interface RawPaymentEntry {
@@ -40,7 +35,6 @@ interface RawReturnEntry {
   subReason: string;
 }
 
-
 // --- Inlined dataProcessor.ts content starts here ---
 // All functions from dataProcessor.ts are included directly in this worker
 // to make it self-contained and avoid module resolution issues in the worker environment.
@@ -50,19 +44,12 @@ const dataProcessor = (() => {
       if (value === null || value === undefined || value === '') {
         return 0;
       }
-    
       let s = String(value).trim();
-    
-      // Handle accounting-style negative numbers like (1,200.00)
       if (s.startsWith('(') && s.endsWith(')')) {
         s = '-' + s.substring(1, s.length - 1);
       }
-      
-      // Remove characters that are not digits, a decimal point, or a minus sign.
       const sanitized = s.replace(/[^0-9.-]/g, '');
-    
       const number = parseFloat(sanitized);
-      
       return isNaN(number) ? 0 : number;
     };
     
@@ -77,7 +64,7 @@ const dataProcessor = (() => {
         if (value instanceof Date && !isNaN(value.getTime())) {
             return value;
         }
-        if (typeof value === 'number' && value > 25569) { // 25569 is 1/1/1970
+        if (typeof value === 'number' && value > 25569) {
             const date = new Date((value - 25569) * 86400 * 1000);
             const utcDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
             if (!isNaN(utcDate.getTime())) {
@@ -107,25 +94,56 @@ const dataProcessor = (() => {
         return `₹${value.toFixed(2)}`;
     }
     
-    function runFullAnalysis(filesData: any, skuPrices: any) {
-        const filterContext = calculateFilterContext(filesData);
-        const initialFilters = { dateRange: { start: '', end: '' }, orderStatuses: [], selectedSkus: [], selectedStates: [], selectedReasons: [], keyword: '', calculateTrend: false };
-        const { filteredPayments, filteredOrders, filteredReturns } = getFilteredRawData(filesData, filterContext, initialFilters);
-        const prices = skuPrices || { skuCosts: {}, skuPackagingCosts: {}, externalMarketingCost: 0 };
-        const adsCost = filesData.adsCost || 0;
+    // --- All other data processing functions are included here ---
+    function calculateFilterContext(filesData: any) {
+        const paymentsMap = new Map<string, RawPaymentEntry>((filesData.payments || []).map((p: RawPaymentEntry) => [p.orderId, p]));
+        const ordersMap = new Map<string, RawOrderEntry>((filesData.orders || []).map((o: RawOrderEntry) => [o.orderId, o]));
+        const returnsMap = new Map<string, RawReturnEntry>((filesData.returns || []).map((r: RawReturnEntry) => [r.orderId, r]));
     
-        const paymentsDashboardData = calculatePaymentsDashboard(filteredPayments, prices, adsCost, filesData);
-        const ordersDashboardData = calculateOrdersDashboard(filteredOrders);
-        const returnsDashboardData = calculateReturnsDashboard(filteredReturns);
+        const allOrderIds = new Set([...paymentsMap.keys(), ...ordersMap.keys(), ...returnsMap.keys()]);
     
-        const allDashboardData = {
-            payments: paymentsDashboardData,
-            orders: ordersDashboardData,
-            returns: returnsDashboardData,
+        const mergedOrders: any[] = [];
+        const availableSkus = new Set<string>();
+        const availableStates = new Set<string>();
+        const availableReasons = new Set<string>();
+        const availableStatuses = new Set<string>();
+    
+        for (const id of allOrderIds) {
+            if (!id) continue; 
+            const p = paymentsMap.get(id);
+            const o = ordersMap.get(id);
+            const r = returnsMap.get(id);
+            
+            const sku = parseString(p?.sku || o?.sku || r?.sku);
+            const status = parseString(p?.status || o?.status || (r ? (r.returnType.toLowerCase().includes('rto') ? 'RTO' : 'Return') : 'Unknown'));
+            const date = parseDate(p?.orderDate || null);
+            const state = parseString(o?.state);
+            const reason = r ? parseString(r.returnReason) : undefined;
+            
+            const mergedOrder = {
+                orderId: id,
+                sku: sku,
+                status: status,
+                date: date,
+                state: state,
+                returnInfo: reason ? { reason: reason } : undefined,
+            };
+            mergedOrders.push(mergedOrder);
+    
+            if (sku) availableSkus.add(sku);
+            if (status) availableStatuses.add(status);
+            if (state) availableStates.add(state);
+            if (reason) availableReasons.add(reason);
+        }
+    
+        return {
+            mergedOrders,
+            availableSkus: [...availableSkus].sort(),
+            availableStates: [...availableStates].sort(),
+            availableReasons: [...availableReasons].sort(),
+            availableStatuses: [...availableStatuses].sort(),
         };
-        return { allDashboardData, filterContext };
     }
-    
     
     function calculatePaymentsDashboard(paymentsData: any[], prices: any, adsCost: number, allFilesData: any) {
         const hasData = paymentsData && paymentsData.length > 0;
@@ -390,44 +408,6 @@ const dataProcessor = (() => {
         return alerts;
     }
     
-    function calculateFilterContext(filesData: any) {
-        const paymentsMap = new Map<string, RawPaymentEntry>((filesData.payments || []).map((p: RawPaymentEntry) => [p.orderId, p]));
-        const ordersMap = new Map<string, RawOrderEntry>((filesData.orders || []).map((o: RawOrderEntry) => [o.orderId, o]));
-        const returnsMap = new Map<string, RawReturnEntry>((filesData.returns || []).map((r: RawReturnEntry) => [r.orderId, r]));
-        const allOrderIds = new Set([...paymentsMap.keys(), ...ordersMap.keys(), ...returnsMap.keys()]);
-    
-        const mergedOrders: any[] = [];
-        const availableSkus = new Set<string>();
-        const availableStates = new Set<string>();
-        const availableReasons = new Set<string>();
-        const availableStatuses = new Set<string>();
-    
-        for (const id of allOrderIds) {
-            if (!id) continue;
-            const p = paymentsMap.get(id);
-            const o = ordersMap.get(id);
-            const r = returnsMap.get(id);
-            const sku = parseString(p?.sku || o?.sku || r?.sku);
-            const status = parseString(p?.status || o?.status || (r ? (r.returnType.toLowerCase().includes('rto') ? 'RTO' : 'Return') : 'Unknown'));
-            const date = parseDate(p?.orderDate || null);
-            const state = parseString(o?.state);
-            const reason = r ? parseString(r.returnReason) : undefined;
-            mergedOrders.push({ orderId: id, sku, status, date, state, returnInfo: reason ? { reason } : undefined });
-            if (sku) availableSkus.add(sku);
-            if (status) availableStatuses.add(status);
-            if (state) availableStates.add(state);
-            if (reason) availableReasons.add(reason);
-        }
-        
-        return {
-            mergedOrders,
-            availableSkus: [...availableSkus].sort(),
-            availableStates: [...availableStates].sort(),
-            availableReasons: [...availableReasons].sort(),
-            availableStatuses: [...availableStatuses].sort(),
-        };
-    }
-    
     function getFilteredRawData(filesData: any, filterContext: any, filters: any) {
         let filteredMasterList = [...filterContext.mergedOrders];
         const { start, end } = filters.dateRange;
@@ -482,165 +462,52 @@ const dataProcessor = (() => {
                 value: data.Delivered, Delivered: data.Delivered, Return: data.Return,
             }));
     }
-
-    return { runFullAnalysis };
+    
+    return {
+        calculateFilterContext,
+        getFilteredRawData,
+        calculatePaymentsDashboard,
+        calculateOrdersDashboard,
+        calculateReturnsDashboard
+    };
 })();
 
 
 // --- Worker Main Logic ---
-
-const fileConfigs = {
-  payments: { 
-    sheetName: "Order Payments", 
-    range: 2,
-    parser: (row: any[]): RawPaymentEntry => ({ 
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[0]),       // Col A
-        orderDate: dataProcessor.runFullAnalysis.prototype.parseDate(row[1]),       // Col B
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[4]),           // Col E
-        status: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),        // Col F
-        gstRate: dataProcessor.runFullAnalysis.prototype.parseNumber(row[6]),       // Col G
-        finalPayment: dataProcessor.runFullAnalysis.prototype.parseNumber(row[11]), // Col L
-        invoicePrice: dataProcessor.runFullAnalysis.prototype.parseNumber(row[14]), // Col O
-        returnCost: dataProcessor.runFullAnalysis.prototype.parseNumber(row[25]),   // Col Z
-        tcs: dataProcessor.runFullAnalysis.prototype.parseNumber(row[32]),          // Col AG
-        tds: dataProcessor.runFullAnalysis.prototype.parseNumber(row[34]),          // Col AI
-        claimAmount: dataProcessor.runFullAnalysis.prototype.parseNumber(row[36]),  // Col AK
-        recovery: dataProcessor.runFullAnalysis.prototype.parseNumber(row[37]),     // Col AL
-    }) 
-  },
-  orders: { 
-    sheetName: null, 
-    range: 1,
-    parser: (row: any[]): RawOrderEntry => ({ 
-        status: dataProcessor.runFullAnalysis.prototype.parseString(row[0]),
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[1]),
-        state: dataProcessor.runFullAnalysis.prototype.parseString(row[3]),
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),
-        size: dataProcessor.runFullAnalysis.prototype.parseString(row[6]),
-    }) 
-  },
-  returns: { 
-    sheetName: null, 
-    range: 8,
-    parser: (row: any[]): RawReturnEntry => ({ 
-        sku: dataProcessor.runFullAnalysis.prototype.parseString(row[2]),
-        size: dataProcessor.runFullAnalysis.prototype.parseString(row[3]),
-        category: dataProcessor.runFullAnalysis.prototype.parseString(row[5]),
-        orderId: dataProcessor.runFullAnalysis.prototype.parseString(row[8]),
-        returnType: dataProcessor.runFullAnalysis.prototype.parseString(row[11]),
-        returnReason: dataProcessor.runFullAnalysis.prototype.parseString(row[19]),
-        subReason: dataProcessor.runFullAnalysis.prototype.parseString(row[20]),
-    }) 
-  }
-};
-
-const normalizeHeader = (text: string) => String(text || '').replace(/\s+/g, '').toLowerCase();
-
 self.onmessage = (event) => {
     try {
-        const { newFile, existingFilesData, skuPrices } = event.data;
-        const { file, type: fileType } = newFile;
+        const { filesData, filterContext: existingFilterContext, filters, skuPrices, recalculateContext } = event.data;
 
-        self.postMessage({ type: 'progress', progress: 10, message: 'Reading file...' });
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = e.target!.result;
-                self.postMessage({ type: 'progress', progress: 30, message: 'Parsing workbook...' });
-                
-                if (!self.XLSX) throw new Error('SheetJS library failed to load.');
-                const workbook = self.XLSX.read(data, { type: 'array', cellDates: false, raw: true });
-                
-                const config = fileConfigs[fileType as keyof typeof fileConfigs];
-                let sheet: any;
-                let dataStartRow = config.range;
+        // If recalculateContext is true, we must build it. Otherwise, we use the one passed in.
+        const context = recalculateContext ? dataProcessor.calculateFilterContext(filesData) : existingFilterContext;
 
-                if (fileType === 'orders' || fileType === 'returns') {
-                    const validations = {
-                        orders: (headers: string[]) => {
-                            const h = headers.map(normalizeHeader);
-                            return h[1]?.includes('suborderno') && h[5]?.includes('sku');
-                        },
-                        returns: (headers: string[]) => {
-                            const h = headers.map(normalizeHeader);
-                            return h[2]?.includes('sku') && h[8]?.includes('subordernumber');
-                        }
-                    };
+        if (!context) {
+            throw new Error("Filter context is missing and was not recalculated.");
+        }
 
-                    const validateRow = validations[fileType as 'orders' | 'returns'];
-                    
-                    sheetSearch:
-                    for (const sName of workbook.SheetNames) {
-                        const currentSheet = workbook.Sheets[sName];
-                        if (!currentSheet || !currentSheet['!ref']) continue;
-
-                        const MAX_HEADER_ROW_SCAN = 10;
-                        const sheetRange = self.XLSX.utils.decode_range(currentSheet['!ref']);
-
-                        for (let i = 0; i < MAX_HEADER_ROW_SCAN && i <= sheetRange.e.r; i++) {
-                            try {
-                                const headers: string[] = (self.XLSX.utils.sheet_to_json(currentSheet, {
-                                    header: 1,
-                                    range: i,
-                                    defval: ""
-                                })[0] || []);
-                                
-                                if (headers.length > 5 && validateRow(headers)) {
-                                    sheet = currentSheet;
-                                    dataStartRow = i + 1;
-                                    break sheetSearch;
-                                }
-                            } catch (e) { /* Ignore errors during scan */ }
-                        }
-                    }
-                } else if (fileType === 'payments') {
-                    const foundSheetName = workbook.SheetNames.find((name: string) => name.trim() === config.sheetName);
-                    if (foundSheetName) {
-                        sheet = workbook.Sheets[foundSheetName];
-                    }
-                }
-                
-                if (!sheet) {
-                    let errorHint = "Please ensure the file contains a sheet with the correct headers.";
-                    if (fileType === 'orders') errorHint = "Please ensure the file contains 'Sub Order No' in column B and 'SKU' in column F in the header.";
-                    else if (fileType === 'returns') errorHint = "Please ensure the file contains 'SKU' in column C and 'Suborder Number' in column I in the header.";
-                    else if (fileType === 'payments') errorHint = `Please ensure the file contains a sheet named exactly '${config.sheetName}'.`;
-                    throw new Error(`Could not find a valid sheet in ${file.name}. ${errorHint}`);
-                }
-
-                const jsonData = self.XLSX.utils.sheet_to_json(sheet, { header: 1, range: dataStartRow, defval: "" });
-                const parsedData = jsonData.map(config.parser).filter((d: any) => d.orderId || d.sku);
-                
-                let adsCost = 0;
-                if (fileType === 'payments') {
-                    const adsSheetName = workbook.SheetNames.find((name: string) => name.trim().toLowerCase() === "ads cost");
-                    if (adsSheetName) {
-                        const adsSheet = workbook.Sheets[adsSheetName];
-                        adsCost = self.XLSX.utils.sheet_to_json(adsSheet, { header: 1, range: 3, defval: "" }).reduce((acc: number, row: any[]) => acc + (dataProcessor.runFullAnalysis.prototype.parseNumber(row[7]) || 0), 0);
-                    }
-                }
-                
-                self.postMessage({ type: 'progress', progress: 60, message: 'Merging data...' });
-                const updatedFilesData = { ...existingFilesData, [fileType]: parsedData };
-                if (adsCost > 0 || updatedFilesData.adsCost) {
-                    updatedFilesData.adsCost = (existingFilesData.adsCost || 0) + adsCost;
-                }
-
-                self.postMessage({ type: 'progress', progress: 75, message: 'Calculating analytics...' });
-                const { allDashboardData, filterContext } = dataProcessor.runFullAnalysis(updatedFilesData, skuPrices);
-              
-                self.postMessage({ 
-                    type: 'done',
-                    payload: { allDashboardData, filterContext, newFilesData: updatedFilesData }
-                });
-
-            } catch (err: any) {
-                self.postMessage({ type: 'error', message: err.message });
-            }
+        // Run the filtering and recalculation logic
+        const { filteredPayments, filteredOrders, filteredReturns } = dataProcessor.getFilteredRawData(filesData, context, filters);
+        
+        const allDashboardData = {
+            payments: dataProcessor.calculatePaymentsDashboard(filteredPayments, skuPrices, filesData.adsCost || 0, filesData),
+            orders: dataProcessor.calculateOrdersDashboard(filteredOrders),
+            returns: dataProcessor.calculateReturnsDashboard(filteredReturns)
         };
-        reader.onerror = () => self.postMessage({ type: 'error', message: 'Error reading file in worker.' });
-        reader.readAsArrayBuffer(file);
-    } catch(e: any) {
-        self.postMessage({ type: 'error', message: `Critical worker error: ${e.message}` });
+      
+        // The payload that will be sent back
+        const payload: any = { allDashboardData };
+        
+        // If we recalculated the context, we need to send it back to the main thread
+        if (recalculateContext) {
+            payload.filterContext = context;
+        }
+
+        self.postMessage({ 
+            type: 'done',
+            payload: payload
+        });
+
+    } catch (err: any) {
+        self.postMessage({ type: 'error', message: err.message });
     }
 };

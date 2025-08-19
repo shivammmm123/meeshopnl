@@ -1,9 +1,11 @@
 
 
+
+
 export interface SkuPrices {
   skuCosts: { [key: string]: number };
-  packagingCost: number;
-  marketingCost: number; // This is now sourced from Ads Cost sheet
+  skuPackagingCosts: { [key: string]: number };
+  externalMarketingCost: number;
 }
 
 export interface FilterState {
@@ -12,6 +14,7 @@ export interface FilterState {
   selectedSkus: string[];
   selectedStates: string[];
   selectedReasons: string[];
+  keyword: string;
   calculateTrend?: boolean;
 }
 
@@ -66,7 +69,24 @@ export interface UnitEconomicsData {
   netMargin: string;
   netProfitPerUnit: string;
   pricesEntered: boolean;
+  // New fields
+  invoicePrice: string;
+  totalGst: string;
+  netProfitWithoutGst: string;
+  netProfitPerUnitWithoutGst: string;
+  // Fields for table
+  claimAmount: string;
+  recovery: string;
+  tds: string;
+  tcs: string;
 }
+
+export interface SkuProfitLossData {
+    sku: string;
+    value: number; // profit or loss amount
+    orders: number;
+}
+
 
 // --- NEW DECOUPLED DASHBOARD DATA TYPES ---
 
@@ -76,6 +96,12 @@ export interface PaymentsDashboardData {
   unitEconomics: UnitEconomicsData;
   dailyDeliveredVsReturns: NameValueData[];
   deliveredVsRtoPie: NameValueData[];
+  deliveredVsReturnPie: NameValueData[];
+  topDeliveredSkus: NameValueData[];
+  topReturnedSkus: NameValueData[];
+  skuProfitData: SkuProfitLossData[];
+  skuLossData: SkuProfitLossData[];
+  keywordDistribution: NameValueData[];
   netProfit: number;
   alerts: AlertData[];
   smartAlerts: SmartAlert[];
@@ -151,6 +177,12 @@ export interface RawPaymentEntry {
   finalPayment: string | number;
   claimAmount: string | number;
   returnCost: string | number;
+  // New fields
+  invoicePrice?: string | number;
+  gstRate?: string | number;
+  recovery?: string | number;
+  tds?: string | number;
+  tcs?: string | number;
 }
 
 export interface RawOrderEntry {
@@ -176,4 +208,12 @@ export interface FilesData {
   orders?: RawOrderEntry[];
   returns?: RawReturnEntry[];
   adsCost?: number;
+}
+
+export type UploadableFile = 'payments' | 'orders' | 'returns';
+
+export interface WorkerPayload {
+    allDashboardData: AllDashboardsData,
+    filterContext: FilterContextData,
+    newFilesData: FilesData,
 }

@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { DollarSign, Package, RotateCcw, UploadCloud, Loader2, CheckCircle } from 'lucide-react';
-import { SkuPrices, FilesData } from '../types';
-import { UploadableFile, WorkerPayload } from '../App';
+import { SkuPrices, FilesData, UploadableFile, WorkerPayload } from '../types';
 import InfoTooltip from './InfoTooltip';
-import { workerCode } from '../utils/file.worker';
-import { processFileLocally, LocalProcessorPayload } from '../utils/localFileProcessor';
 import AppHeader from './AppHeader';
 import Footer from './Footer';
 
@@ -63,67 +60,48 @@ export const UploadPage: React.FC<UploadPageProps> = ({ onUploadStart, onProcess
     };
 
     try {
-        const fileSizeThreshold = 10 * 1024 * 1024; // 10 MB
+        // Use a proper TypeScript module for the worker.
+        const worker = new Worker(new URL('../utils/file.worker.ts', import.meta.url));
 
-        if (file.size < fileSizeThreshold) {
-            // Process on main thread for small files
-            const payload = await processFileLocally(
-                file, fileType, filesData, skuPrices,
-                (p) => { 
-                    setProgress(p.value); 
-                    setProgressMessage(p.message);
-                }
-            );
-            setStatuses(prev => ({ ...prev, [fileType]: 'success' }));
-            onProcessingComplete(fileType, payload as WorkerPayload);
-        } else {
-            // Process with worker for large files
-            const blob = new Blob([workerCode], { type: 'application/javascript' });
-            const workerUrl = URL.createObjectURL(blob);
-            const worker = new Worker(workerUrl);
+        const workerCleanup = () => worker.terminate();
 
-            const workerCleanup = () => {
-                worker.terminate();
-                URL.revokeObjectURL(workerUrl);
-            };
-
-            worker.onmessage = (e) => {
-                const { type, payload, message, progress } = e.data;
-                try {
-                  if (type === 'status') {
-                      setProgressMessage(message);
-                  } else if (type === 'progress') {
-                      setProgress(progress);
-                      if (message) setProgressMessage(message);
-                  } else if (type === 'done') {
-                      setStatuses(prev => ({ ...prev, [fileType]: 'success' }));
-                      onProcessingComplete(fileType, payload);
-                      workerCleanup();
-                  } else if (type === 'error') {
-                      throw new Error(message);
-                  }
-                } catch(err) {
-                    const errorMessage = `Critical error handling worker message: ${err instanceof Error ? err.message : String(err)}`;
-                    setError(errorMessage);
-                    console.error(errorMessage, err);
-                    setStatuses(prev => ({...prev, [fileType]: 'error'}));
-                    setProgress(null);
-                    setProgressMessage('');
-                    workerCleanup();
-                }
-            };
-            
-            worker.onerror = (e) => {
+        worker.onmessage = (e) => {
+            const { type, payload, message, progress } = e.data;
+            try {
+              if (type === 'status') {
+                  setProgressMessage(message);
+              } else if (type === 'progress') {
+                  setProgress(progress);
+                  if (message) setProgressMessage(message);
+              } else if (type === 'done') {
+                  setStatuses(prev => ({ ...prev, [fileType]: 'success' }));
+                  onProcessingComplete(fileType, payload);
+                  workerCleanup();
+              } else if (type === 'error') {
+                  throw new Error(message);
+              }
+            } catch(err) {
+                const errorMessage = `Critical error handling worker message: ${err instanceof Error ? err.message : String(err)}`;
+                setError(errorMessage);
+                console.error(errorMessage, err);
+                setStatuses(prev => ({...prev, [fileType]: 'error'}));
+                setProgress(null);
+                setProgressMessage('');
                 workerCleanup();
-                throw new Error(`A critical error occurred in the file worker. Details: ${e.message}`);
-            };
+            }
+        };
+        
+        worker.onerror = (e) => {
+            workerCleanup();
+            throw new Error(`A critical error occurred in the file worker. Details: ${e.message}`);
+        };
 
-            worker.postMessage({
-                newFile: { file, type: fileType },
-                existingFilesData: filesData,
-                skuPrices: skuPrices,
-            });
-        }
+        worker.postMessage({
+            newFile: { file, type: fileType },
+            existingFilesData: filesData,
+            skuPrices: skuPrices,
+        });
+
     } catch (err) {
         const errorMessage = `Error processing file: ${err instanceof Error ? err.message : String(err)}`;
         setError(errorMessage);

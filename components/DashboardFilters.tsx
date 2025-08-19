@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FilterContextData, FilterState } from '../types';
-import { SlidersHorizontal, X, UploadCloud, Check } from 'lucide-react';
+import { SlidersHorizontal, X, UploadCloud, Check, Search } from 'lucide-react';
 
 interface DashboardFiltersProps {
   filterContext: FilterContextData;
@@ -134,7 +134,8 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ filterContext, filt
     filters.orderStatuses.length > 0 ||
     filters.selectedSkus.length > 0 ||
     filters.selectedStates.length > 0 ||
-    filters.selectedReasons.length > 0;
+    filters.selectedReasons.length > 0 ||
+    filters.keyword !== '';
     
   const clearFilters = () => {
       const emptyFilters: FilterState = {
@@ -143,6 +144,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ filterContext, filt
         selectedSkus: [],
         selectedStates: [],
         selectedReasons: [],
+        keyword: '',
         calculateTrend: false,
       };
       setLocalFilters(emptyFilters);
@@ -178,6 +180,20 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ filterContext, filt
                 <label htmlFor="end-date-filter" className="text-sm font-medium text-gray-700">End Date</label>
                 <input id="end-date-filter" type="date" name="end" value={localFilters.dateRange.end} onChange={handleDateChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500" />
               </div>
+               {/* Keyword Filter */}
+               <div>
+                  <label htmlFor="keyword-filter" className="text-sm font-medium text-gray-700">Keyword in SKU</label>
+                   <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input id="keyword-filter" type="text"
+                          value={localFilters.keyword}
+                          onChange={(e) => handleLocalFilterChange('keyword', e.target.value)}
+                          placeholder="e.g., 'tshirt'"
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      />
+                  </div>
+              </div>
+
 
               {/* SKU Filter */}
               {filterContext.availableSkus.length > 0 && (

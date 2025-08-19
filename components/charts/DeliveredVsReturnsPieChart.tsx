@@ -4,18 +4,27 @@ import { NameValueData } from '../../types';
 
 interface ChartProps {
   data: NameValueData[];
-  theme?: 'light' | 'dark';
 }
 
 const DeliveredVsReturnsPieChart: React.FC<ChartProps> = ({ data }) => {
-    const COLORS = { delivered: '#22c55e', return: '#ef4444' };
+    const COLORS = ['#22c55e', '#ef4444'];
     
     return (
         <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                    <Cell key="cell-0" fill={COLORS.delivered} />
-                    <Cell key="cell-1" fill={COLORS.return} />
+                <Pie 
+                    data={data} 
+                    dataKey="value" 
+                    nameKey="name" 
+                    cx="50%" 
+                    cy="50%" 
+                    outerRadius={80} 
+                    label={(entry) => `${((entry.percent || 0) * 100).toFixed(0)}%`}
+                    labelLine={false}
+                >
+                    {data.map((entry, index) => (
+                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
                 </Pie>
                 <Tooltip 
                     contentStyle={{

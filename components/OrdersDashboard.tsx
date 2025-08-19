@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { OrdersDashboardData } from '../types';
 import OrderStatusPieChart from './charts/OrderStatusPieChart';
@@ -72,4 +73,4 @@ const OrdersDashboard: React.FC<DashboardProps> = ({ data }) => {
     );
 };
 
-export default OrdersDashboard;
+export default React.memo(OrdersDashboard);

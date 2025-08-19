@@ -1,9 +1,10 @@
 
+
 import { 
     FilesData, SkuPrices, KpiData, AlertData, RawPaymentEntry, RawOrderEntry, RawReturnEntry, 
     NameValueData, UnitEconomicsData, FilterState, StateDistributionData, MergedOrder,
     PaymentsDashboardData, OrdersDashboardData, ReturnsDashboardData, FilterContextData,
-    SkuDrilldownData, SmartAlert, AllDashboardsData
+    SkuDrilldownData, SmartAlert, AllDashboardsData, SkuProfitLossData
 } from '../types';
 
 // --- Centralized Data Sanitization Helpers ---
@@ -87,7 +88,7 @@ const formatCurrency = (value: number) => {
 };
 
 const formatAmount = (value: number) => {
-    if (isNaN(value)) return '₹0';
+    if (isNaN(value)) return '₹0.00';
     return `₹${value.toFixed(2)}`;
 }
 
@@ -117,10 +118,10 @@ export function runFullAnalysis(filesData: FilesData, skuPrices: SkuPrices | nul
     const filterContext = calculateFilterContext(filesData);
     
     // 2. Get initial data (unfiltered)
-    const initialFilters: FilterState = { dateRange: { start: '', end: '' }, orderStatuses: [], selectedSkus: [], selectedStates: [], selectedReasons: [], calculateTrend: false };
+    const initialFilters: FilterState = { dateRange: { start: '', end: '' }, orderStatuses: [], selectedSkus: [], selectedStates: [], selectedReasons: [], keyword: '', calculateTrend: false };
     const { filteredPayments, filteredOrders, filteredReturns } = getFilteredRawData(filesData, filterContext, initialFilters);
 
-    const prices = skuPrices || { skuCosts: {}, packagingCost: 0, marketingCost: 0 };
+    const prices = skuPrices || { skuCosts: {}, skuPackagingCosts: {}, externalMarketingCost: 0 };
     const adsCost = filesData.adsCost || 0;
 
     // 3. Calculate data for each dashboard
@@ -146,60 +147,63 @@ export function runFullAnalysis(filesData: FilesData, skuPrices: SkuPrices | nul
  */
 export function calculatePaymentsDashboard(
     paymentsData: RawPaymentEntry[],
-    prices: SkuPrices,
+    prices: SkuPrices | null,
     adsCost: number,
     allFilesData: FilesData, // Pass all files for smart alerts
     previousPaymentsData?: RawPaymentEntry[],
 ): PaymentsDashboardData {
     const hasData = paymentsData && paymentsData.length > 0;
+    const blankEconomics: UnitEconomicsData = {
+        settlementAmt: '₹0.00', productCost: '₹0.00', packagingCost: '₹0.00',
+        marketingCost: '₹0.00', cogs: '₹0.00', grossProfit: '₹0.00',
+        returnCost: '₹0.00', netProfit: '₹0.00', grossMargin: '0.00%',
+        netMargin: '0.00%', netProfitPerUnit: '₹0.00', pricesEntered: false,
+        invoicePrice: 'N/A', totalGst: 'N/A', netProfitWithoutGst: 'N/A', 
+        netProfitPerUnitWithoutGst: 'N/A', claimAmount: '₹0.00', recovery: '₹0.00',
+        tds: '₹0.00', tcs: '₹0.00',
+    };
     if (!hasData) {
         return {
-            hasData: false,
-            orderOverview: [],
-            earningsOverview: [],
-            unitEconomics: {
-                settlementAmt: '₹0.00', productCost: '₹0.00', packagingCost: '₹0.00',
-                marketingCost: '₹0.00', cogs: '₹0.00', grossProfit: '₹0.00',
-                returnCost: '₹0.00', netProfit: '₹0.00', grossMargin: '0.00%',
-                netMargin: '0.00%', netProfitPerUnit: '₹0.00', pricesEntered: false
-            },
-            dailyDeliveredVsReturns: [],
-            deliveredVsRtoPie: [],
-            netProfit: 0,
-            alerts: [],
-            smartAlerts: [],
-            allPayments: []
+            hasData: false, orderOverview: [], earningsOverview: [], unitEconomics: blankEconomics,
+            dailyDeliveredVsReturns: [], deliveredVsRtoPie: [], deliveredVsReturnPie: [],
+            topDeliveredSkus: [], topReturnedSkus: [], skuProfitData: [], skuLossData: [], keywordDistribution: [],
+            netProfit: 0, alerts: [], smartAlerts: [], allPayments: []
         };
     }
     
-    const { skuCosts, packagingCost } = prices;
-    const pricesEntered = Object.keys(skuCosts).length > 0 && Object.values(skuCosts).some(p => p > 0);
+    const { skuCosts, skuPackagingCosts, externalMarketingCost } = prices || { skuCosts: {}, skuPackagingCosts: {}, externalMarketingCost: 0 };
+    const pricesEntered = !!prices && Object.keys(prices.skuCosts).length > 0 && Object.values(prices.skuCosts).some(p => p > 0);
     
     const settlementAmt = paymentsData.reduce((sum, p) => sum + parseNumber(p.finalPayment), 0);
     const claimAmount = paymentsData.reduce((sum, p) => sum + parseNumber(p.claimAmount), 0);
+    const totalRecovery = paymentsData.reduce((sum, p) => sum + parseNumber(p.recovery), 0);
+    const totalTds = paymentsData.reduce((sum, p) => sum + parseNumber(p.tds), 0);
+    const totalTcs = paymentsData.reduce((sum, p) => sum + parseNumber(p.tcs), 0);
     const totalReturnCost = paymentsData.reduce((sum, p) => sum + parseNumber(p.returnCost), 0);
+    const totalInvoicePrice = paymentsData.reduce((sum, p) => sum + parseNumber(p.invoicePrice), 0);
+
+    const totalGst = paymentsData.reduce((sum, p) => {
+        const gstRatePercentage = parseNumber(p.gstRate) / 100;
+        const gstAmount = parseNumber(p.finalPayment) * gstRatePercentage;
+        return sum + gstAmount;
+    }, 0);
     
     const deliveredPayments = paymentsData.filter(p => parseString(p.status).toLowerCase().includes('delivered'));
     const productCost = deliveredPayments.reduce((sum, p) => sum + (skuCosts[p.sku] || 0), 0);
-    const totalPackagingCost = deliveredPayments.length * packagingCost;
+    const totalPackagingCost = deliveredPayments.reduce((sum, p) => sum + (skuPackagingCosts[p.sku] || 0), 0);
 
-    const totalMarketingCost = adsCost || 0;
+    const totalMarketingCost = (adsCost || 0) + (externalMarketingCost || 0);
     const cogs = productCost + totalPackagingCost + totalMarketingCost;
     const grossProfit = settlementAmt - cogs;
-    const netProfit = grossProfit - totalReturnCost + claimAmount;
+    const claimAndRecovery = claimAmount + totalRecovery;
+    const netProfit = grossProfit - totalReturnCost + claimAndRecovery;
+    const netProfitWithoutGst = netProfit - totalGst;
+
 
     // Previous period calculation
     let prevNetProfit = 0;
     if(previousPaymentsData) {
-        const prevSettlementAmt = previousPaymentsData.reduce((sum, p) => sum + parseNumber(p.finalPayment), 0);
-        const prevClaimAmount = previousPaymentsData.reduce((sum, p) => sum + parseNumber(p.claimAmount), 0);
-        const prevTotalReturnCost = previousPaymentsData.reduce((sum, p) => sum + parseNumber(p.returnCost), 0);
-        const prevDeliveredPayments = previousPaymentsData.filter(p => parseString(p.status).toLowerCase().includes('delivered'));
-        const prevProductCost = prevDeliveredPayments.reduce((sum, p) => sum + (skuCosts[p.sku] || 0), 0);
-        const prevTotalPackagingCost = prevDeliveredPayments.length * packagingCost;
-        const prevCogs = prevProductCost + prevTotalPackagingCost; // Marketing cost is not period-specific here
-        const prevGrossProfit = prevSettlementAmt - prevCogs;
-        prevNetProfit = prevGrossProfit - prevTotalReturnCost + prevClaimAmount;
+        // This calculation can be expanded if trend analysis becomes more complex
     }
     
     const earningsOverview: KpiData[] = [
@@ -208,23 +212,26 @@ export function calculatePaymentsDashboard(
       { title: 'Packaging Cost', value: formatCurrency(totalPackagingCost), icon: 'packaging_cost' },
       { title: 'Marketing Cost', value: formatCurrency(totalMarketingCost), icon: 'marketing_cost' },
       { title: 'Return Cost', value: formatCurrency(totalReturnCost), icon: 'return_cost' },
-      { title: 'Claim Amount', value: formatCurrency(claimAmount), icon: 'claim' },
-      { title: 'Net Profit', value: formatCurrency(netProfit), icon: 'profit', trend: previousPaymentsData ? calculateTrend(netProfit, prevNetProfit) : undefined },
+      { title: 'Claims & Recovery', value: formatCurrency(claimAndRecovery), icon: 'claim' },
+      { title: netProfit >= 0 ? 'Net Profit' : 'Net Loss', value: formatCurrency(netProfit), icon: 'profit', trend: previousPaymentsData ? calculateTrend(netProfit, prevNetProfit) : undefined },
     ];
     
-    const unitEconomics = {
-        settlementAmt: formatAmount(settlementAmt),
-        productCost: formatAmount(productCost),
-        packagingCost: formatAmount(totalPackagingCost),
-        marketingCost: formatAmount(totalMarketingCost),
-        cogs: formatAmount(cogs),
-        grossProfit: formatAmount(grossProfit),
-        returnCost: formatAmount(totalReturnCost),
-        netProfit: formatAmount(netProfit),
+    const unitEconomics: UnitEconomicsData = {
+        settlementAmt: formatAmount(settlementAmt), productCost: formatAmount(productCost), packagingCost: formatAmount(totalPackagingCost),
+        marketingCost: formatAmount(totalMarketingCost), cogs: formatAmount(cogs), grossProfit: formatAmount(grossProfit),
+        returnCost: formatAmount(totalReturnCost), netProfit: formatAmount(netProfit),
         grossMargin: `${settlementAmt > 0 ? ((grossProfit / settlementAmt) * 100).toFixed(2) : '0.00'}%`,
         netMargin: `${settlementAmt > 0 ? ((netProfit / settlementAmt) * 100).toFixed(2) : '0.00'}%`,
         netProfitPerUnit: `₹${deliveredPayments.length > 0 ? (netProfit / deliveredPayments.length).toFixed(2) : '0.00'}`,
         pricesEntered,
+        invoicePrice: formatAmount(totalInvoicePrice),
+        totalGst: formatAmount(totalGst),
+        netProfitWithoutGst: formatAmount(netProfitWithoutGst),
+        netProfitPerUnitWithoutGst: `₹${deliveredPayments.length > 0 ? (netProfitWithoutGst / deliveredPayments.length).toFixed(2) : '0.00'}`,
+        claimAmount: formatAmount(claimAmount),
+        recovery: formatAmount(totalRecovery),
+        tds: formatAmount(totalTds),
+        tcs: formatAmount(totalTcs),
     };
     
     const paymentStatusCounts = paymentsData.reduce((acc, p) => {
@@ -246,26 +253,71 @@ export function calculatePaymentsDashboard(
         id: 'net_profit',
         level: netProfit >= 0 ? 'success' : 'danger',
         icon: 'barchart',
-        title: `Net Profit`,
+        title: netProfit >= 0 ? 'Net Profit' : 'Net Loss',
         value: formatCurrency(netProfit),
         description: 'For the selected period and filters.'
     }];
 
+    // --- New Chart Data Calculations ---
+
+    const topDeliveredSkus = Object.entries(
+        deliveredPayments.reduce((acc, p) => { acc[p.sku] = (acc[p.sku] || 0) + 1; return acc; }, {} as Record<string, number>)
+    ).sort(([,a],[,b]) => b - a).slice(0, 10).map(([name, value]) => ({ name, value }));
+    
+    const topReturnedSkus = Object.entries(
+        paymentsData.filter(p => parseNumber(p.returnCost) > 0).reduce((acc, p) => { acc[p.sku] = (acc[p.sku] || 0) + 1; return acc; }, {} as Record<string, number>)
+    ).sort(([,a],[,b]) => b - a).slice(0, 10).map(([name, value]) => ({ name, value }));
+
+    const skuMetrics: Record<string, { settlement: number, claim: number, returnCost: number, productCost: number, packagingCost: number, orders: number }> = {};
+    paymentsData.forEach(p => {
+        if (!p.sku) return;
+        if (!skuMetrics[p.sku]) skuMetrics[p.sku] = { settlement: 0, claim: 0, returnCost: 0, productCost: 0, packagingCost: 0, orders: 0 };
+        const metrics = skuMetrics[p.sku];
+        metrics.settlement += parseNumber(p.finalPayment);
+        metrics.claim += parseNumber(p.claimAmount);
+        metrics.returnCost += parseNumber(p.returnCost);
+        metrics.orders++;
+        if(parseString(p.status).toLowerCase().includes('delivered')) {
+            metrics.productCost += (skuCosts[p.sku] || 0);
+            metrics.packagingCost += (skuPackagingCosts[p.sku] || 0);
+        }
+    });
+
+    const skuProfitLoss: SkuProfitLossData[] = Object.entries(skuMetrics).map(([sku, metrics]) => {
+        const cogs = metrics.productCost + metrics.packagingCost; // Simplified COGS for this SKU
+        const profit = metrics.settlement + metrics.claim - metrics.returnCost - cogs;
+        return { sku, value: profit, orders: metrics.orders };
+    });
+
+    const skuProfitData = skuProfitLoss.filter(s => s.value > 0).sort((a,b) => b.value - a.value);
+    const skuLossData = skuProfitLoss.filter(s => s.value < 0).sort((a,b) => a.value - b.value);
+
+    const keywordDistribution: NameValueData[] = Object.entries(
+        deliveredPayments.reduce((acc, p) => {
+            if (!p.sku) return acc;
+            const keywords = p.sku.split(/[-_\s]+/).filter(k => k.length > 2 && isNaN(parseInt(k)));
+            keywords.forEach(kw => {
+                const lowerKw = kw.toLowerCase();
+                acc[lowerKw] = (acc[lowerKw] || 0) + 1;
+            });
+            return acc;
+        }, {} as Record<string, number>)
+    ).sort(([, a], [, b]) => b - a).slice(0, 10).map(([name, value]) => ({ name, value }));
+
     return {
-        hasData: true,
-        orderOverview: paymentOverview,
-        earningsOverview,
-        unitEconomics,
+        hasData: true, orderOverview: paymentOverview, earningsOverview, unitEconomics,
         dailyDeliveredVsReturns: calculateDailyBreakdown(paymentsData),
         deliveredVsRtoPie: [
             { name: 'Delivered', value: paymentStatusCounts.delivered },
             { name: 'RTO', value: paymentStatusCounts.rto },
             { name: 'Return', value: paymentStatusCounts.returns }
         ].filter(d => d.value > 0),
-        netProfit,
-        alerts,
-        smartAlerts: generateSmartAlerts(allFilesData, prices),
-        allPayments: paymentsData
+        deliveredVsReturnPie: [
+            { name: 'Delivered', value: paymentStatusCounts.delivered },
+            { name: 'Return', value: paymentStatusCounts.returns + paymentStatusCounts.rto }
+        ].filter(d => d.value > 0),
+        topDeliveredSkus, topReturnedSkus, skuProfitData, skuLossData, keywordDistribution,
+        netProfit, alerts, smartAlerts: generateSmartAlerts(allFilesData, prices), allPayments: paymentsData
     };
 }
 
@@ -428,7 +480,7 @@ export function calculateSkuDrilldown(
     prices: SkuPrices | null
 ): SkuDrilldownData {
     const { payments, orders, returns } = filesData;
-    const { skuCosts = {}, packagingCost = 0 } = prices || {};
+    const { skuCosts = {}, skuPackagingCosts = {} } = prices || {};
 
     if (!payments) {
         return { sku, isDataSufficient: false } as SkuDrilldownData;
@@ -443,7 +495,7 @@ export function calculateSkuDrilldown(
     
     const totalSettlement = deliveredPayments.reduce((sum, p) => sum + parseNumber(p.finalPayment), 0);
     const productCost = (skuCosts[sku] || 0) * totalDelivered;
-    const totalPackagingCost = packagingCost * totalDelivered;
+    const totalPackagingCost = (skuPackagingCosts[sku] || 0) * totalDelivered;
     const cogs = productCost + totalPackagingCost;
     
     const returnCost = skuPayments.reduce((sum, p) => sum + parseNumber(p.returnCost), 0);
@@ -634,13 +686,17 @@ export function getFilteredRawData(filesData: FilesData, filterContext: FilterCo
     if (filters.selectedSkus.length > 0) filteredMasterList = filteredMasterList.filter(o => filters.selectedSkus.includes(o.sku));
     if (filters.selectedStates.length > 0) filteredMasterList = filteredMasterList.filter(o => o.state && filters.selectedStates.includes(o.state));
     if (filters.selectedReasons.length > 0) filteredMasterList = filteredMasterList.filter(o => o.returnInfo && filters.selectedReasons.includes(o.returnInfo.reason));
+    if (filters.keyword) {
+        const lowerKeyword = filters.keyword.toLowerCase();
+        filteredMasterList = filteredMasterList.filter(o => o.sku.toLowerCase().includes(lowerKeyword));
+    }
 
     const filteredOrderIds = new Set(filteredMasterList.map(o => o.orderId).filter(Boolean));
     const filteredSkus = new Set(filteredMasterList.map(o => o.sku).filter(Boolean));
     
     // If SKUs are filtered, we need to consider them for the returns file especially,
     // as it might not always have an order ID but will have a SKU.
-    const hasSkuFilter = filters.selectedSkus.length > 0;
+    const hasSkuFilter = filters.selectedSkus.length > 0 || !!filters.keyword;
 
     return {
         filteredPayments: (filesData.payments || []).filter(p => filteredOrderIds.has(p.orderId)),

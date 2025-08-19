@@ -1,11 +1,15 @@
 
+
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { PaymentsDashboardData } from '../types';
+import { PaymentsDashboardData, NameValueData } from '../types';
 import DeliveredVsReturnsBarChart from './charts/DeliveredVsReturnsBarChart';
-import UnitEconomicsTable from './charts/UnitEconomicsTable';
-import DeliveredVsRtoPieChart from './charts/DeliveredVsRtoPieChart';
+import DeliveredVsReturnsPieChart from './charts/DeliveredVsReturnsPieChart';
 import KpiCard from './KpiCard';
+import UnitEconomicsTable from './charts/UnitEconomicsTable';
+import TopSkusChart from './charts/TopSkusChart';
+import PaginatedDataTable from './PaginatedDataTable';
+import DataTable from './DataTable';
 
 interface DashboardProps {
   data: PaymentsDashboardData | null;
@@ -53,12 +57,26 @@ const PaymentsDashboard: React.FC<DashboardProps> = ({ data }) => {
     }
 
     const {
-        orderOverview,
-        earningsOverview, 
-        dailyDeliveredVsReturns,
-        unitEconomics, 
-        deliveredVsRtoPie
+        orderOverview, earningsOverview, unitEconomics, 
+        dailyDeliveredVsReturns, deliveredVsReturnPie,
+        topDeliveredSkus, topReturnedSkus,
+        skuProfitData, skuLossData, keywordDistribution,
+        allPayments
     } = data;
+    
+    const paymentColumns = [
+        { key: 'orderDate', header: 'Date' },
+        { key: 'orderId', header: 'Order ID' },
+        { key: 'sku', header: 'SKU' },
+        { key: 'status', header: 'Status' },
+        { key: 'invoicePrice', header: 'Invoice Price' },
+        { key: 'finalPayment', header: 'Settlement' },
+        { key: 'returnCost', header: 'Return Cost' },
+        { key: 'claimAmount', header: 'Claim' },
+        { key: 'recovery', header: 'Recovery' },
+        { key: 'tds', header: 'TDS' },
+        { key: 'tcs', header: 'TCS' },
+    ];
 
     return (
         <div className="space-y-6">
@@ -72,17 +90,44 @@ const PaymentsDashboard: React.FC<DashboardProps> = ({ data }) => {
                     <UnitEconomicsTable data={unitEconomics} />
                  </ChartCard>
              </div>
-
+            
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <ChartCard title="Delivered vs Returns Trend (from Payments)">
-                    <DeliveredVsReturnsBarChart data={dailyDeliveredVsReturns}/>
+                <ChartCard title="Top 10 SKUs by Delivery">
+                    <TopSkusChart data={topDeliveredSkus} showLabelInside />
                 </ChartCard>
-                <ChartCard title="Order Breakdown (from Payments)">
-                    <DeliveredVsRtoPieChart data={deliveredVsRtoPie} />
+                 <ChartCard title="Top 10 SKUs by Returns">
+                    <TopSkusChart data={topReturnedSkus} showLabelInside />
                 </ChartCard>
              </div>
+
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <PaginatedDataTable title="SKU Wise Profit" data={skuProfitData} />
+                <PaginatedDataTable title="SKU Wise Loss" data={skuLossData} />
+             </div>
+             
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                    <ChartCard title="Daily Delivered vs Returns Trend">
+                        <DeliveredVsReturnsBarChart data={dailyDeliveredVsReturns}/>
+                    </ChartCard>
+                </div>
+                <ChartCard title="Delivered vs Returns Ratio">
+                    <DeliveredVsReturnsPieChart data={deliveredVsReturnPie} />
+                </ChartCard>
+             </div>
+             
+             <ChartCard title="Top Keywords by Delivered Orders">
+                <TopSkusChart data={keywordDistribution} />
+             </ChartCard>
+
+             <DataTable 
+                data={allPayments} 
+                columns={paymentColumns}
+                title="All Payments Data"
+                description="A detailed view of all entries from your uploaded Payments file that match the current filters."
+            />
         </div>
     );
 };
 
-export default PaymentsDashboard;
+export default React.memo(PaymentsDashboard);
